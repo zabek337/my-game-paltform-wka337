@@ -5,7 +5,7 @@
 <title>Platformówka337</title>
 <style>
 body, html {margin:0;padding:0;width:100%;height:100%;overflow:hidden;font-family:'Trebuchet MS',sans-serif;background:#87CEEB;}
-canvas {display:block;}
+canvas {display:block;background:#87CEEB;}
 #levelSelect {position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;color:white;background: rgba(0,0,0,0.8);}
 #levelSelect h2 {margin-bottom:30px;font-size:48px;font-weight:bold;color:#ff5555;text-shadow:3px 3px 0 #000;}
 #levelButtons{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;}
@@ -26,7 +26,6 @@ button.disabled{opacity:0.4;cursor:not-allowed;}
 </style>
 </head>
 <body>
-
 <div id="levelSelect">
   <h2>Platformówka337</h2>
   <div id="levelButtons"></div>
@@ -49,6 +48,7 @@ button.disabled{opacity:0.4;cursor:not-allowed;}
       <label><input type="radio" name="controlType" value="phone"> Telefon</label>
     </p>
     <p><label><input type="checkbox" id="enableTouchBtn"> Włącz przyciski dotykowe</label></p>
+    <p>Głośność: <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="1"></p>
     <p><button id="resetStatsBtn">Resetuj statystyki</button></p>
   </div>
 </div>
@@ -92,6 +92,7 @@ const statsContent=document.getElementById('statsContent');
 const skinPreviewHUD=document.getElementById('skinPreviewHUD');
 const touchControls=document.getElementById('touchControls');
 const enableTouchBtn=document.getElementById('enableTouchBtn');
+const volumeSlider=document.getElementById('volumeSlider');
 
 // Game variables
 const baseWidth=800; const baseHeight=400;
@@ -130,13 +131,13 @@ function renderStats(){statsContent.innerHTML = `
 <p>Łącznie przegranych żyć: ${stats.totalLivesLost}</p>
 <p>Łącznie zgonów: ${stats.totalDeaths}</p>
 <p>Łącznie zdobytych punktów: ${stats.totalPoints}</p>
-<p>Coins: ${Math.floor(stats.totalPoints/10 + score/10)}</p>
+<p>Coins: ${Math.floor(stats.totalPoints/10)}</p>
 `;}
 
 // HUD
 function updateHUD(){
     document.getElementById('score').innerText="Punkty: "+score;
-    document.getElementById('coins').innerText="Coins: "+Math.floor(stats.totalPoints/10 + score/10);
+    document.getElementById('coins').innerText="Coins: "+Math.floor(score/1);
     document.getElementById('level').innerText="Level: "+currentLevel;
     document.getElementById('lives').innerText="Życia: "+lives;
     const timeSec=Math.floor((Date.now()-startTime)/1000);
@@ -146,7 +147,7 @@ function updateHUD(){
 // Poziomy
 function generateLevel(levelNum){
   const platforms=[], spikes=[], coinsArr=[], moving=[];
-  const lvlWidth=8000; const lvlHeight=baseHeight;
+  const lvlWidth=80000; const lvlHeight=baseHeight;
   platforms.push({x:0,y:lvlHeight-50,width:lvlWidth,height:50});
   const difficulty=0.2+levelNum*0.03;
   const holeChance=levelNum>=2?0.15+levelNum*0.01:0.05;
@@ -154,8 +155,7 @@ function generateLevel(levelNum){
     if(Math.random()<holeChance) continue;
     const h=Math.random()*30;
     platforms.push({x:i,y:lvlHeight-100-h,width:80,height:10});
-    // Więcej monet: 50% szansy
-    if(Math.random()<0.5) coinsArr.push({x:i+20,y:lvlHeight-110-h,collected:false,size:15});
+    if(Math.random()<0.2) coinsArr.push({x:i+20,y:lvlHeight-110-h,collected:false,size:15});
     if(Math.random()<difficulty*2) spikes.push({x:i+25,y:lvlHeight-65,width:15,height:10});
     if(Math.random()<difficulty) moving.push({x:i+35,y:lvlHeight-85,width:20,height:20,dx:2,alive:true});
   }
@@ -197,11 +197,6 @@ function showLevelButtons() {
     if(i > maxUnlockedLevel) btn.classList.add('disabled');
     else btn.onclick = () => {
       currentLevel=i; score=0; resetPlayer(); levelSelect.style.display='none'; gameStarted=true; startTime=Date.now();
-      // Ukryj przyciski w rundzie
-      toggleShopBtn.style.display='none';
-      chooseSkinBtn.style.display='none';
-      settingsBtn.style.display='none';
-      statsBtn.style.display='none';
     };
     levelButtonsDiv.appendChild(btn);
   }
@@ -220,7 +215,7 @@ function renderShop(){
     else price.innerText = skin.price === 0 ? "Darmowy" : skin.price + " 🪙";
     preview.onclick=()=>{
       if(ownedSkins.includes(skin.id)){currentSkin=skin; saveStats(); updateHUD();}
-      else if(Math.floor(stats.totalPoints/10 + score/10) >= skin.price){ownedSkins.push(skin.id); currentSkin=skin; saveStats(); updateHUD(); renderShop();}
+      else if(Math.floor(score/1) >= skin.price){score -= skin.price; ownedSkins.push(skin.id); currentSkin=skin; saveStats(); updateHUD(); renderShop();}
       else alert("Za mało monet!");
     };
     div.appendChild(preview); div.appendChild(price);
@@ -260,6 +255,9 @@ document.getElementById('resetStatsBtn').onclick=()=>{
 // Pętla gry
 function update() {
   if(!gameStarted) return;
+  // Ukryj przyciski w rundzie
+  toggleShopBtn.style.display="none"; chooseSkinBtn.style.display="none"; settingsBtn.style.display="none"; statsBtn.style.display="none";
+
   player.dx = 0;
   if(keys.left) player.dx = -speed;
   if(keys.right) player.dx = speed;
@@ -282,6 +280,11 @@ function update() {
     if(!c.collected && player.x + player.width > c.x && player.x < c.x + c.size &&
        player.y + player.height > c.y && player.y < c.y + c.size){
          c.collected = true; addPoints(1);
+         if(score % 10 === 0){ // co 10 coins nowy level
+             if(currentLevel < MAX_LEVEL){ currentLevel++; resetPlayer();}
+             maxUnlockedLevel = Math.max(maxUnlockedLevel,currentLevel);
+             showLevelButtons();
+         }
     }
   });
 
@@ -296,7 +299,7 @@ function update() {
     if(player.x + player.width > m.x && player.x < m.x + m.width &&
        player.y + player.height > m.y && player.y < m.y + m.height) dead=true;
   });
-  if(dead){if(lives<1) score=0; onDeath();}
+  if(dead){onDeath();}
   if(player.y>baseHeight+500) resetPlayer();
   updateHUD();
 }
@@ -319,8 +322,9 @@ function draw() {
 
 function loop(){update(); draw(); requestAnimationFrame(loop);}
 requestAnimationFrame(loop);
-
 });
 </script>
 </body>
 </html>
+
+
